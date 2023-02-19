@@ -27,8 +27,14 @@ send_dns_request(Request, Ip, Port) ->
             {udp, Socket, _, _, Bin} ->
               {ok, {_, _, _, AA, _, _}} = process_header(Bin),
               case AA of
-                0 -> do; % Not an authority for domain. Query nameservers provided in response;
-                1 -> do % authority for domain. Extract domain from answers and return
+                0 ->
+                  % Not an authority for domain. Query nameservers provided in response;
+                  NameserverIp = extract_nameserver_ip(Bin),
+                  NewRequest = build_dns_query(NameserverIp, 53, "google.com"),
+                  send_dns_request(NewRequest, NameserverIp, 53);
+                1 ->
+                  % authority for domain. Extract domain from answers and return
+                  get_a_record(Bin)
               end,
               {ok, Bin}
           after 2000 ->
@@ -37,8 +43,9 @@ send_dns_request(Request, Ip, Port) ->
   gen_udp:close(Socket),
   Value.
 
-extract_domain(Response) ->
-  {noreply, Response}.
+get_a_record(Response) ->
+  A = unbound,
+  {ok, A}.
 
 extract_nameserver_ip(Response) ->
   {noreply, Response}.
@@ -47,5 +54,5 @@ build_dns_query(Ip, Port, Domain) ->
   {noreply, Ip, Port, Domain}.
 
 process_header(Response) ->
-  <<ID:16, QR:1, Opcode:4, AA:1, TC:1, RD:1, Remainder/binary>> = Response,
+  <<ID:16, QR:1, Opcode:4, AA:1, TC:1, RD:1, _/binary>> = Response,
   {ok, {ID, QR, Opcode, AA, TC, RD}}.
