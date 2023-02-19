@@ -37,6 +37,15 @@ send_dns_request(Request, Ip, Port) ->
   gen_udp:close(Socket),
   Value.
 
+extract_domain(Response) ->
+  {noreply, Response}.
+
+extract_nameserver_ip(Response) ->
+  {noreply, Response}.
+
+build_dns_query(Ip, Port, Domain) ->
+  {noreply, Ip, Port, Domain}.
+
 process_header(Response) ->
   <<ID:16, QR:1, Opcode:4, AA:1, TC:1, RD:1, Remainder/binary>> = Response,
   {ok, {ID, QR, Opcode, AA, TC, RD}}.
