@@ -54,4 +54,4 @@ build_dns_query(Ip, Port, Domain) ->
 
 process_header(Response) ->
   <<ID:16, QR:1, Opcode:4, AA:1, TC:1, RD:1, RA:1, Z:3, RCODE:4, QDCOUNT:16, ANCOUNT:16, NSCOUNT:16, ARCOUNT:16, _/binary>> = Response,
-  {ok, {ID, QR, Opcode, AA, TC, RD}}.
+  {ok, {ID, QR, Opcode, AA, TC, RD, RA, Z, RCODE, QDCOUNT, ANCOUNT, NSCOUNT, ARCOUNT}}.
