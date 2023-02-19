@@ -25,7 +25,7 @@ send_dns_request(Request, Ip, Port) ->
   ok = gen_udp:send(Socket, Ip, Port, Request),
   Value = receive
             {udp, Socket, _, _, Bin} ->
-              {ok, {_, _, _, AA, _, _}} = process_header(Bin),
+              {ok, {_, _, _, AA, _, _, _, _, _, _, _, _, _}} = process_header(Bin),
               case AA of
                 0 ->
                   % Not an authority for domain. Query nameservers provided in response;
