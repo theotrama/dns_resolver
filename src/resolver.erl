@@ -46,11 +46,12 @@ get_a_record(Response) ->
   {ok, "123.123.123.123"}.
 
 extract_nameserver_ip(Response) ->
+  <<_:96, _/binary>> = Response,
   {ok, "199.7.83.42"}.
 
 build_dns_query(Ip, Port, Domain) ->
   {ok, "Request"}.
 
 process_header(Response) ->
-  <<ID:16, QR:1, Opcode:4, AA:1, TC:1, RD:1, _/binary>> = Response,
+  <<ID:16, QR:1, Opcode:4, AA:1, TC:1, RD:1, RA:1, Z:3, RCODE:4, QDCOUNT:16, ANCOUNT:16, NSCOUNT:16, ARCOUNT:16, _/binary>> = Response,
   {ok, {ID, QR, Opcode, AA, TC, RD}}.
