@@ -30,13 +30,12 @@ send_dns_request(Request, Ip, Port) ->
                 0 ->
                   % Not an authority for domain. Query nameservers provided in response;
                   NameserverIp = extract_nameserver_ip(Bin),
-                  NewRequest = build_dns_query(NameserverIp, 53, "google.com"),
-                  send_dns_request(NewRequest, NameserverIp, 53);
+                  build_dns_query(NameserverIp, 53, "google.com");
+                %send_dns_request(NewRequest, NameserverIp, 53);
                 1 ->
                   % authority for domain. Extract domain from answers and return
-                  get_a_record(Bin)
-              end,
-              {ok, Bin}
+                  {ok, get_a_record(Bin)}
+              end
           after 2000 ->
       error
           end,
@@ -44,8 +43,7 @@ send_dns_request(Request, Ip, Port) ->
   Value.
 
 get_a_record(Response) ->
-  A = unbound,
-  {ok, A}.
+  {ok, "123.123.123.123"}.
 
 extract_nameserver_ip(Response) ->
   {noreply, Response}.
