@@ -29,9 +29,9 @@ send_dns_request(Request, Ip, Port) ->
               case AA of
                 0 ->
                   % Not an authority for domain. Query nameservers provided in response;
-                  NameserverIp = extract_nameserver_ip(Bin),
-                  build_dns_query(NameserverIp, 53, "google.com");
-                %send_dns_request(NewRequest, NameserverIp, 53);
+                  {ok, NameserverIp} = extract_nameserver_ip(Bin),
+                  {ok, NewRequest} = build_dns_query(NameserverIp, Port, "google.com"),
+                  send_dns_request(NewRequest, NameserverIp, Port);
                 1 ->
                   % authority for domain. Extract domain from answers and return
                   {ok, get_a_record(Bin)}
@@ -46,10 +46,10 @@ get_a_record(Response) ->
   {ok, "123.123.123.123"}.
 
 extract_nameserver_ip(Response) ->
-  {noreply, Response}.
+  {ok, "199.7.83.42"}.
 
 build_dns_query(Ip, Port, Domain) ->
-  {noreply, Ip, Port, Domain}.
+  {ok, "Request"}.
 
 process_header(Response) ->
   <<ID:16, QR:1, Opcode:4, AA:1, TC:1, RD:1, _/binary>> = Response,
