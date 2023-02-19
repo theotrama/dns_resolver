@@ -25,7 +25,11 @@ send_dns_request(Request, Ip, Port) ->
   ok = gen_udp:send(Socket, Ip, Port, Request),
   Value = receive
             {udp, Socket, _, _, Bin} ->
-              process_header(Bin),
+              {ok, {_, _, _, AA, _, _}} = process_header(Bin),
+              case AA of
+                0 -> do; % Not an authority for domain. Query nameservers provided in response;
+                1 -> do % authority for domain. Extract domain from answers and return
+              end,
               {ok, Bin}
           after 2000 ->
       error
@@ -34,11 +38,5 @@ send_dns_request(Request, Ip, Port) ->
   Value.
 
 process_header(Response) ->
-  <<TransactionId:16/binary, QR:1/binary, Opcode:4/binary, Remainder/binary>> = Response,
-  io:format(TransactionId),
-  io:format("\n"),
-  io:format(QR),
-  io:format("\n"),
-  io:format(Opcode),
-  io:format("\n"),
-  io:format(Remainder).
+  <<ID:16, QR:1, Opcode:4, AA:1, TC:1, RD:1, Remainder/binary>> = Response,
+  {ok, {ID, QR, Opcode, AA, TC, RD}}.
