@@ -10,17 +10,35 @@
 -author("jankoch").
 
 %% API
--export([hello_world/0]).
+-export([run/0]).
 
 
-hello_world() -> io:fwrite("hello, world\n").
+run() ->
+  Request = "\x3f\x90\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x06\x67\x6f\x6f\x67\x6c\x65\x03\x63\x6f\x6d\x00\x00\x01\x00\x01",
+  Ip = "199.7.83.42",
+  Port = 53,
+  send_dns_request(Request, Ip, Port).
 
 
-send_dns_request(Request) ->
+send_dns_request(Request, Ip, Port) ->
   {ok, Socket} = gen_udp:open(0, [binary]),
-  ok = gen_udp:send(Socket, "199.7.83.42", 53, Request),
+  ok = gen_udp:send(Socket, Ip, Port, Request),
   Value = receive
-            () -> io:fwrite("hello, world\n")
+            {udp, Socket, _, _, Bin} ->
+              process_header(Bin),
+              {ok, Bin}
+          after 2000 ->
+      error
           end,
   gen_udp:close(Socket),
   Value.
+
+process_header(Response) ->
+  <<TransactionId:16/binary, QR:1/binary, Opcode:4/binary, Remainder/binary>> = Response,
+  io:format(TransactionId),
+  io:format("\n"),
+  io:format(QR),
+  io:format("\n"),
+  io:format(Opcode),
+  io:format("\n"),
+  io:format(Remainder).
