@@ -46,7 +46,27 @@ get_a_record(Response) ->
   {ok, "123.123.123.123"}.
 
 extract_nameserver_ip(Response) ->
-  <<_:96, _/binary>> = Response,
+  <<Test:96, FirstNameLength:8, Type:16, Class:24, _/binary>> = Response,
+  io:fwrite("Length of first part: ~p~n", [FirstNameLength]),
+  <<Test:96, FirstNameLength:8, Type:16, Class:24, _/binary>> = Response,
+
+  <<_:96, Name:96, Type:16, Class:24, _/binary>> = Response,
+  <<Length:8, Rest/binary>> = <<Name>>,
+  io:fwrite("Length: ~p~n", [Length]),
+  io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(Response)]),
+  io:fwrite("Name string as hex: ~p~n", [Length]),
+
+
+  Pixel = <<213, 45, 132, 64, 76, 32, 76, 0, 0, 234, 32, 15>>,
+  io:fwrite("Length: ~p~n", [Length]),
+  io:fwrite("Length: ~p~n", [Response]),
+  io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(Pixel)]),
+  <<_:8, First:Length, _/binary>> = Response,
+
+
+  <<_:96, Name:96, Type:16, Class:24, _/binary>> = Response,
+  io:fwrite("Type: ~p~n", [binary:encode_hex(<<1, 2, 3, 4, 5, 6, 255>>)]),
+  io:fwrite("Type: ~p~n", [Class]),
   {ok, "199.7.83.42"}.
 
 build_dns_query(Ip, Port, Domain) ->
