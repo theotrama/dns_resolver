@@ -46,9 +46,13 @@ get_a_record(Response) ->
   {ok, "123.123.123.123"}.
 
 extract_nameserver_ip(Response) ->
-  <<Test:96, FirstNameLength:8, Type:16, Class:24, _/binary>> = Response,
+  <<Test:96, RemainingPacket/binary>> = Response,
+  <<FirstNameLength:8, Remainder/binary>> = RemainingPacket,
   io:fwrite("Length of first part: ~p~n", [FirstNameLength]),
-  <<Test:96, FirstNameLength:8, Type:16, Class:24, _/binary>> = Response,
+  <<G:8, O:8, _/binary>> = Remainder,
+  io:format("Message number ~s~n", [RemainingPacket]),
+  TestList = [G, O],
+  io:format("Message number ~s~n", [erlang:list_to_binary(TestList)]),
 
   <<_:96, Name:96, Type:16, Class:24, _/binary>> = Response,
   <<Length:8, Rest/binary>> = <<Name>>,
@@ -59,7 +63,8 @@ extract_nameserver_ip(Response) ->
 
   Pixel = <<213, 45, 132, 64, 76, 32, 76, 0, 0, 234, 32, 15>>,
   io:fwrite("Length: ~p~n", [Length]),
-  io:fwrite("Length: ~p~n", [Response]),
+  io:fwrite("Response: ~p~n", [Response]),
+  io:fwrite("G: ~p~n", [G]),
   io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(Pixel)]),
   <<_:8, First:Length, _/binary>> = Response,
 
