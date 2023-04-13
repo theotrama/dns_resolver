@@ -47,7 +47,23 @@ get_a_record(Response) ->
 
 extract_nameserver_ip(Response) ->
   <<Test:96, RemainingPacket/binary>> = Response,
-  <<FirstNameLength:8, Remainder/binary>> = RemainingPacket,
+  <<FirstNameLength:8, New/binary>> = RemainingPacket,
+  <<FirstName:FirstNameLength/binary, New2/binary>> = New,
+  io:fwrite("First part: ~s~n", [FirstName]),
+
+  <<SecondNameLength:8, New3/binary>> = New2,
+  io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(New2)]),
+  <<SecondName:SecondNameLength/binary, Trailing:8, New4/binary>> = New3,
+  io:fwrite("Second part: ~s~n", [SecondName]),
+
+  <<_:16, Type:16, Class:16, New5/binary>> = New4,
+  io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(New4)]),
+  io:fwrite("Type: ~p~n", [Type]),
+  io:fwrite("Class: ~p~n", [Type]),
+
+
+  <<Asd:8/binary, Remainder/binary>> = RemainingPacket,
+  io:fwrite("Length of first part: ~p~n", [FirstNameLength]),
   io:fwrite("Length of first part: ~p~n", [FirstNameLength]),
   <<G:8, O:8, _/binary>> = Remainder,
   io:format("Message number ~s~n", [RemainingPacket]),
