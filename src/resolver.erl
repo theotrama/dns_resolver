@@ -21,6 +21,9 @@ run() ->
 
 
 send_dns_request(Request, Ip, Port) ->
+  io:format("---------DNS REQUEST---------~n"),
+  io:format("IP: ~s~n", [Ip]),
+  io:format("Port: ~p~n", [Port]),
   {ok, Socket} = gen_udp:open(0, [binary]),
   ok = gen_udp:send(Socket, Ip, Port, Request),
   Value = receive
@@ -29,9 +32,14 @@ send_dns_request(Request, Ip, Port) ->
               case AA of
                 0 ->
                   % Not an authority for domain. Query nameservers provided in response;
-                  {ok, NameserverIp} = extract_nameserver_ip_addresses(Bin, NameserverCount, AdditionalRecordCount),
-                  {ok, NewRequest} = build_dns_query(NameserverIp, Port, "google.com"),
-                  send_dns_request(NewRequest, NameserverIp, Port);
+                  {ok, NameserverIpAddresses} = extract_nameserver_ip_addresses(Bin, NameserverCount, AdditionalRecordCount),
+                  {ok, NewRequest} = build_dns_query(NameserverIpAddresses, Port, "google.com"),
+                  Test = hd(NameserverIpAddresses),
+                  {ok, IpAddress} = ip_bitstring_to_string(hd(NameserverIpAddresses)),
+                  io:format("The first element is: ~p~n", [Test]),
+
+                  io:format("~n~n"),
+                  send_dns_request(NewRequest, IpAddress, Port);
                 1 ->
                   % authority for domain. Extract domain from answers and return
                   {ok, get_a_record(Bin)}
@@ -44,6 +52,15 @@ send_dns_request(Request, Ip, Port) ->
 
 get_a_record(Response) ->
   {ok, "123.123.123.123"}.
+
+ip_bitstring_to_string(IpBitString) ->
+  % Example list of integers
+  CharList = binary_to_list(IpBitString),
+  StringList = [integer_to_list(Int) || Int <- CharList],
+  Delimiter = ".",
+  JoinedString = string:join(StringList, Delimiter),
+  io:format("~s~n", [JoinedString]),
+  {ok, JoinedString}.
 
 extract_nameserver_ip_addresses(Response, NameserverCount, AdditionalRecordCount) ->
   <<Test:96, RemainingPacket/binary>> = Response,
@@ -93,10 +110,11 @@ extract_additional_records(AdditionalRecords, IpAddresses, N) ->
 append_to_list(Element, List) ->
   List ++ [Element].
 
-build_dns_query(Ip, Port, Domain) ->
+build_dns_query(IpAddresses, Port, Domain) ->
   {ok, "Request"}.
 
 process_header(Response) ->
+  io:format("~n~n---------HEADER---------~n"),
   <<ID:16, QR:1, Opcode:4, AA:1, TC:1, RD:1, RA:1, Z:3, RCODE:4, QDCOUNT:16, ANCOUNT:16, NSCOUNT:16, ARCOUNT:16, _/binary>> = Response,
   io:fwrite("QDCOUNT: ~p~n", [QDCOUNT]),
   io:fwrite("ANCOUNT: ~p~n", [ANCOUNT]),
