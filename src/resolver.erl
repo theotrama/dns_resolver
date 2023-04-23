@@ -25,11 +25,11 @@ send_dns_request(Request, Ip, Port) ->
   ok = gen_udp:send(Socket, Ip, Port, Request),
   Value = receive
             {udp, Socket, _, _, Bin} ->
-              {ok, {_, _, _, AA, _, _, _, _, _, _, _, _, _}} = process_header(Bin),
+              {ok, {_, _, _, AA, _, _, _, _, _, QDCOUNT, AnswerCount, NameserverCount, ARCOUNT}} = process_header(Bin),
               case AA of
                 0 ->
                   % Not an authority for domain. Query nameservers provided in response;
-                  {ok, NameserverIp} = extract_nameserver_ip(Bin),
+                  {ok, NameserverIp} = extract_nameserver_ip(Bin, NameserverCount),
                   {ok, NewRequest} = build_dns_query(NameserverIp, Port, "google.com"),
                   send_dns_request(NewRequest, NameserverIp, Port);
                 1 ->
@@ -45,21 +45,23 @@ send_dns_request(Request, Ip, Port) ->
 get_a_record(Response) ->
   {ok, "123.123.123.123"}.
 
-extract_nameserver_ip(Response) ->
+extract_nameserver_ip(Response, NameserverCount) ->
   <<Test:96, RemainingPacket/binary>> = Response,
   <<FirstNameLength:8, New/binary>> = RemainingPacket,
   <<FirstName:FirstNameLength/binary, New2/binary>> = New,
-  io:fwrite("First part: ~s~n", [FirstName]),
-
   <<SecondNameLength:8, New3/binary>> = New2,
-  io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(New2)]),
   <<SecondName:SecondNameLength/binary, Trailing:8, New4/binary>> = New3,
-  io:fwrite("Second part: ~s~n", [SecondName]),
+  io:fwrite("---------QUERY SECTION---------~n"),
+  io:fwrite("domain name: ~s.~s~n", [FirstName, SecondName]),
 
-  <<_:16, Type:16, Class:16, New5/binary>> = New4,
-  io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(New4)]),
+  <<Type:16, Class:16, New5/binary>> = New4,
   io:fwrite("Type: ~p~n", [Type]),
-  io:fwrite("Class: ~p~n", [Type]),
+  io:fwrite("Class: ~p~n", [Class]),
+
+  io:fwrite("---------AUTHORITATIVE NAMESERVERS---------~n"),
+  io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(New5)]),
+  {ok, New6} = extract_authoritative_nameservers(New5, NameserverCount),
+  io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(New6)]),
 
 
   <<Asd:8/binary, Remainder/binary>> = RemainingPacket,
@@ -90,9 +92,26 @@ extract_nameserver_ip(Response) ->
   io:fwrite("Type: ~p~n", [Class]),
   {ok, "199.7.83.42"}.
 
+extract_authoritative_nameservers(AuthoritativeNameservers, 0) ->
+  {ok, AuthoritativeNameservers};
+extract_authoritative_nameservers(AuthoritativeNameservers, N) ->
+  {ok, {NameServer, NewAuthoritativeNameservers}} = extract_authoritative_nameserver(AuthoritativeNameservers),
+  io:format("~p. nameserver is: ~s~n", [N, NameServer]),
+  extract_authoritative_nameservers(NewAuthoritativeNameservers, N - 1).
+
+extract_authoritative_nameserver(AuthoritativeNameservers) ->
+  %%  Name, Type, Class, TTL, DataLength, NameServer
+  <<Name:16, Type:16, Class:16, TTL:32, DataLength:16, Remainder/binary>> = AuthoritativeNameservers,
+  <<NameServer:DataLength/binary, Remainder2/binary>> = Remainder,
+  {ok, {NameServer, Remainder2}}.
+
 build_dns_query(Ip, Port, Domain) ->
   {ok, "Request"}.
 
 process_header(Response) ->
   <<ID:16, QR:1, Opcode:4, AA:1, TC:1, RD:1, RA:1, Z:3, RCODE:4, QDCOUNT:16, ANCOUNT:16, NSCOUNT:16, ARCOUNT:16, _/binary>> = Response,
+  io:fwrite("QDCOUNT: ~p~n", [QDCOUNT]),
+  io:fwrite("ANCOUNT: ~p~n", [ANCOUNT]),
+  io:fwrite("NSCOUNT: ~p~n", [NSCOUNT]),
+  io:fwrite("ARCOUNT: ~p~n", [ARCOUNT]),
   {ok, {ID, QR, Opcode, AA, TC, RD, RA, Z, RCODE, QDCOUNT, ANCOUNT, NSCOUNT, ARCOUNT}}.
