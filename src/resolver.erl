@@ -28,21 +28,26 @@ send_dns_request(Request, Ip, Port) ->
   ok = gen_udp:send(Socket, Ip, Port, Request),
   Value = receive
             {udp, Socket, _, _, Bin} ->
-              {ok, {_, _, _, AA, _, _, _, _, _, QDCOUNT, AnswerCount, NameserverCount, AdditionalRecordCount}} = process_header(Bin),
+              {ok, {_, _, _, AA, _, _, _, _, _, QueryCount, AnswerCount, NameserverCount, AdditionalRecordCount}} = process_header(Bin),
               case AA of
                 0 ->
                   % Not an authority for domain. Query nameservers provided in response;
                   {ok, NameserverIpAddresses} = extract_nameserver_ip_addresses(Bin, NameserverCount, AdditionalRecordCount),
-                  {ok, NewRequest} = build_dns_query(NameserverIpAddresses, Port, "google.com"),
                   Test = hd(NameserverIpAddresses),
                   {ok, IpAddress} = ip_bitstring_to_string(hd(NameserverIpAddresses)),
                   io:format("The first element is: ~p~n", [Test]),
 
                   io:format("~n~n"),
-                  send_dns_request(NewRequest, IpAddress, Port);
+                  send_dns_request(Request, IpAddress, Port);
                 1 ->
                   % authority for domain. Extract domain from answers and return
-                  {ok, get_a_record(Bin)}
+                  {ok, Response} = extract_query_section(Bin, QueryCount),
+                  io:fwrite("~n~n---------ANSWER RECORDS---------~n"),
+                  {ok, AdditionalRecords, AnswerIpAddresses} = extract_answers(Response, [], AnswerCount),
+                  {ok, IpAddress} = ip_bitstring_to_string(hd(AnswerIpAddresses)),
+                  io:format("IP: ~p~n", [IpAddress]),
+                  io:format("~n~n"),
+                  {ok, IpAddress}
               end
           after 2000 ->
       error
@@ -50,17 +55,24 @@ send_dns_request(Request, Ip, Port) ->
   gen_udp:close(Socket),
   Value.
 
-get_a_record(Response) ->
-  {ok, "123.123.123.123"}.
-
 ip_bitstring_to_string(IpBitString) ->
   % Example list of integers
   CharList = binary_to_list(IpBitString),
   StringList = [integer_to_list(Int) || Int <- CharList],
   Delimiter = ".",
   JoinedString = string:join(StringList, Delimiter),
-  io:format("~s~n", [JoinedString]),
   {ok, JoinedString}.
+
+extract_query_section(Response, QueryCount) ->
+  <<Test:96, RemainingPacket/binary>> = Response,
+  <<FirstNameLength:8, New/binary>> = RemainingPacket,
+  <<FirstName:FirstNameLength/binary, New2/binary>> = New,
+  <<SecondNameLength:8, New3/binary>> = New2,
+  <<SecondName:SecondNameLength/binary, Trailing:8, New4/binary>> = New3,
+  io:fwrite("~n~n---------QUERY SECTION---------~n"),
+  io:fwrite("domain name: ~s.~s~n", [FirstName, SecondName]),
+  <<Type:16, Class:16, New5/binary>> = New4,
+  {ok, New5}.
 
 extract_nameserver_ip_addresses(Response, NameserverCount, AdditionalRecordCount) ->
   <<Test:96, RemainingPacket/binary>> = Response,
@@ -102,16 +114,25 @@ extract_authoritative_nameserver(AuthoritativeNameservers) ->
 extract_additional_records(AdditionalRecords, IpAddresses, 0) ->
   {ok, AdditionalRecords, IpAddresses};
 extract_additional_records(AdditionalRecords, IpAddresses, N) ->
-
   {ok, {IpAddress, NewAdditionalRecords}} = extract_authoritative_nameserver(AdditionalRecords),
   NewList = append_to_list(IpAddress, IpAddresses),
   extract_additional_records(NewAdditionalRecords, NewList, N - 1).
 
-append_to_list(Element, List) ->
-  List ++ [Element].
+extract_answers(AnswerRecords, IpAddresses, 0) ->
+  {ok, AnswerRecords, IpAddresses};
+extract_answers(AnswerRecords, IpAddresses, N) ->
+  {ok, {IpAddress, NewAdditionalRecords}} = extract_authoritative_nameserver(AnswerRecords),
+  NewList = append_to_list(IpAddress, IpAddresses),
+  extract_answers(NewAdditionalRecords, NewList, N - 1).
 
-build_dns_query(IpAddresses, Port, Domain) ->
-  {ok, "Request"}.
+append_to_list(Element, List) ->
+  Length = byte_size(Element),
+  if
+    Length == 4 ->
+      List ++ [Element];
+    true ->
+      List
+  end.
 
 process_header(Response) ->
   io:format("~n~n---------HEADER---------~n"),
