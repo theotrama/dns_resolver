@@ -14,7 +14,9 @@
 
 
 run() ->
-  Request = "\x3f\x90\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x06\x67\x6f\x6f\x67\x6c\x65\x03\x63\x6f\x6d\x00\x00\x01\x00\x01",
+
+%%  Request = "\x3f\x90\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x06\x67\x6f\x6f\x67\x6c\x65\x03\x63\x6f\x6d\x00\x00\x01\x00\x01",
+  Request = "\xbf\x75\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x04\x74\x65\x73\x74\x02\x64\x65\x00\x00\x01\x00\x01",
   Ip = "199.7.83.42",
   Port = 53,
   send_dns_request(Request, Ip, Port).
@@ -77,8 +79,6 @@ extract_nameserver_ip_addresses(Response, QueryCount, NameserverCount, Additiona
   io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(AdditionalRecords)]),
   {ok, IpAddresses}.
 
-
-
 extract_query_sections(Response, 0) ->
   {ok, Response};
 extract_query_sections(Response, N) ->
@@ -86,16 +86,35 @@ extract_query_sections(Response, N) ->
   extract_query_sections(NewResponse, N - 1).
 
 extract_query_section(Response) ->
-  <<Test:96, RemainingPacket/binary>> = Response,
-  <<FirstNameLength:8, New/binary>> = RemainingPacket,
-  <<FirstName:FirstNameLength/binary, New2/binary>> = New,
-  <<SecondNameLength:8, New3/binary>> = New2,
-  <<SecondName:SecondNameLength/binary, Trailing:8, New4/binary>> = New3,
   io:fwrite("~n~n---------QUERY SECTION---------~n"),
-  io:fwrite("domain name: ~s.~s~n", [FirstName, SecondName]),
-  <<Type:16, Class:16, New5/binary>> = New4,
-  {ok, New5}.
+  <<_:96, RemainingPacket/binary>> = Response,
+  {ok, NewResponse} = extract_query_name(RemainingPacket),
+  extract_remaining_query_section(NewResponse).
 
+extract_query_name(Response) ->
+  <<FirstNameLength:8, New/binary>> = Response,
+
+  if FirstNameLength == 0 ->
+    {ok, New};
+    true ->
+      <<FirstName:FirstNameLength/binary, NewResponse/binary>> = New,
+      io:format("Part of query name is: ~s~n", [FirstName]),
+      extract_query_name(NewResponse)
+  end.
+
+extract_remaining_query_section(Response) ->
+  {ok, NewResponse} = extract_type(Response),
+  extract_class(NewResponse).
+
+extract_type(Response) ->
+  <<Type:2/binary, New/binary>> = Response,
+  io:format("Query type: ~p~n", [Type]),
+  {ok, New}.
+
+extract_class(Response) ->
+  <<Class:2/binary, New/binary>> = Response,
+  io:format("Query class: ~p~n", [Class]),
+  {ok, New}.
 
 extract_authoritative_nameservers(AuthoritativeNameservers, 0) ->
   {ok, AuthoritativeNameservers};
