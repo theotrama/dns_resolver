@@ -32,7 +32,7 @@ send_dns_request(Request, Ip, Port) ->
               case AA of
                 0 ->
                   % Not an authority for domain. Query nameservers provided in response;
-                  {ok, NameserverIpAddresses} = extract_nameserver_ip_addresses(Bin, NameserverCount, AdditionalRecordCount),
+                  {ok, NameserverIpAddresses} = extract_nameserver_ip_addresses(Bin, QueryCount, NameserverCount, AdditionalRecordCount),
                   Test = hd(NameserverIpAddresses),
                   {ok, IpAddress} = ip_bitstring_to_string(hd(NameserverIpAddresses)),
                   io:format("The first element is: ~p~n", [Test]),
@@ -41,7 +41,7 @@ send_dns_request(Request, Ip, Port) ->
                   send_dns_request(Request, IpAddress, Port);
                 1 ->
                   % authority for domain. Extract domain from answers and return
-                  {ok, Response} = extract_query_section(Bin, QueryCount),
+                  {ok, Response} = extract_query_sections(Bin, QueryCount),
                   io:fwrite("~n~n---------ANSWER RECORDS---------~n"),
                   {ok, AdditionalRecords, AnswerIpAddresses} = extract_answers(Response, [], AnswerCount),
                   {ok, IpAddress} = ip_bitstring_to_string(hd(AnswerIpAddresses)),
@@ -63,29 +63,8 @@ ip_bitstring_to_string(IpBitString) ->
   JoinedString = string:join(StringList, Delimiter),
   {ok, JoinedString}.
 
-extract_query_section(Response, QueryCount) ->
-  <<Test:96, RemainingPacket/binary>> = Response,
-  <<FirstNameLength:8, New/binary>> = RemainingPacket,
-  <<FirstName:FirstNameLength/binary, New2/binary>> = New,
-  <<SecondNameLength:8, New3/binary>> = New2,
-  <<SecondName:SecondNameLength/binary, Trailing:8, New4/binary>> = New3,
-  io:fwrite("~n~n---------QUERY SECTION---------~n"),
-  io:fwrite("domain name: ~s.~s~n", [FirstName, SecondName]),
-  <<Type:16, Class:16, New5/binary>> = New4,
-  {ok, New5}.
-
-extract_nameserver_ip_addresses(Response, NameserverCount, AdditionalRecordCount) ->
-  <<Test:96, RemainingPacket/binary>> = Response,
-  <<FirstNameLength:8, New/binary>> = RemainingPacket,
-  <<FirstName:FirstNameLength/binary, New2/binary>> = New,
-  <<SecondNameLength:8, New3/binary>> = New2,
-  <<SecondName:SecondNameLength/binary, Trailing:8, New4/binary>> = New3,
-  io:fwrite("~n~n---------QUERY SECTION---------~n"),
-  io:fwrite("domain name: ~s.~s~n", [FirstName, SecondName]),
-
-  <<Type:16, Class:16, New5/binary>> = New4,
-  io:fwrite("Type: ~p~n", [Type]),
-  io:fwrite("Class: ~p~n", [Class]),
+extract_nameserver_ip_addresses(Response, QueryCount, NameserverCount, AdditionalRecordCount) ->
+  {ok, New5} = extract_query_sections(Response, QueryCount),
 
   io:fwrite("~n~n---------AUTHORITATIVE NAMESERVERS---------~n"),
   io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(New5)]),
@@ -97,6 +76,26 @@ extract_nameserver_ip_addresses(Response, NameserverCount, AdditionalRecordCount
   io:format("Nameserver IP addresses: ~p~n", [IpAddresses]),
   io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(AdditionalRecords)]),
   {ok, IpAddresses}.
+
+
+
+extract_query_sections(Response, 0) ->
+  {ok, Response};
+extract_query_sections(Response, N) ->
+  {ok, NewResponse} = extract_query_section(Response),
+  extract_query_sections(NewResponse, N - 1).
+
+extract_query_section(Response) ->
+  <<Test:96, RemainingPacket/binary>> = Response,
+  <<FirstNameLength:8, New/binary>> = RemainingPacket,
+  <<FirstName:FirstNameLength/binary, New2/binary>> = New,
+  <<SecondNameLength:8, New3/binary>> = New2,
+  <<SecondName:SecondNameLength/binary, Trailing:8, New4/binary>> = New3,
+  io:fwrite("~n~n---------QUERY SECTION---------~n"),
+  io:fwrite("domain name: ~s.~s~n", [FirstName, SecondName]),
+  <<Type:16, Class:16, New5/binary>> = New4,
+  {ok, New5}.
+
 
 extract_authoritative_nameservers(AuthoritativeNameservers, 0) ->
   {ok, AuthoritativeNameservers};
