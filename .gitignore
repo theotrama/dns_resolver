@@ -17,4 +17,4 @@ _build/
 _checkouts/
 
 .idea/
-.out/
+out/
