@@ -11,17 +11,45 @@
 
 %% API
 -export([run/0]).
-
+-import(string, [tokens/2]).
 
 run() ->
 
-  Request = "\x3f\x90\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x06\x67\x6f\x6f\x67\x6c\x65\x03\x63\x6f\x6d\x00\x00\x01\x00\x01",
+  OldRequest = "\x3f\x90\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x06\x67\x6f\x6f\x67\x6c\x65\x03\x63\x6f\x6d\x00\x00\x01\x00\x01",
+  Request = [63, 144, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 6, 103, 111, 111, 103, 108, 101, 3, 99,
+    111, 109, 0, 0, 1, 0, 1],
   %%Request = "\xbf\x75\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x04\x74\x65\x73\x74\x02\x64\x65\x00\x00\x01\x00\x01",
-
-
+  TestRequest = "63144",
   Ip = "199.7.83.42",
   Port = 53,
-  send_dns_request(Request, Ip, Port).
+  {ok, Dns} = build_dns_request("erlang.org"),
+  send_dns_request(Dns, Ip, Port).
+
+
+build_dns_request(DomainName) ->
+  TransactionId = [63, 144],
+  Flags = [1, 0],
+  NumberOfQuestions = [0, 1],
+  AnswerResourceRecords = [0, 0],
+  AuthorityResourceRecords = [0, 0],
+  AdditionalResourceRecords = [0, 0],
+
+  QueryList = string:tokens(DomainName, "."),
+
+
+  QueryListTransformed = lists:map(fun(X) -> [length(X), lists:map(fun(Y) -> [Y] end, X)] end, QueryList),
+  QueryListFlattened = lists:flatten(QueryListTransformed),
+
+  QueryEnd = [0],
+  RecordType = [0, 1],
+  Class = [0, 1],
+
+  InitialRequestPacket = lists:flatten([TransactionId, Flags, NumberOfQuestions,
+    AnswerResourceRecords, AuthorityResourceRecords, AdditionalResourceRecords,
+    QueryListFlattened, QueryEnd, RecordType, Class]),
+
+  io:format("Request packet: ~p~n", [InitialRequestPacket]),
+  {ok, InitialRequestPacket}.
 
 
 send_dns_request(Request, Ip, Port) ->
