@@ -10,10 +10,10 @@
 -author("jankoch").
 
 %% API
--export([run/0]).
+-export([run/1]).
 -import(string, [tokens/2]).
 
-run() ->
+run(Domain) ->
 
   OldRequest = "\x3f\x90\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x06\x67\x6f\x6f\x67\x6c\x65\x03\x63\x6f\x6d\x00\x00\x01\x00\x01",
   Request = [63, 144, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 6, 103, 111, 111, 103, 108, 101, 3, 99,
@@ -22,7 +22,7 @@ run() ->
   TestRequest = "63144",
   Ip = "199.7.83.42",
   Port = 53,
-  {ok, Dns} = build_dns_request("erlang.org"),
+  {ok, Dns} = build_dns_request(Domain),
   send_dns_request(Dns, Ip, Port).
 
 
@@ -66,6 +66,7 @@ send_dns_request(Request, Ip, Port) ->
                   % Not an authority for domain. Query nameservers provided in response;
                   {ok, NameserverIpAddresses} = extract_nameserver_ip_addresses(Bin, QueryCount, NameserverCount, AdditionalRecordCount),
                   Test = hd(NameserverIpAddresses),
+                  io:fwrite("NameserverIpAddresses: ~p~n", [NameserverIpAddresses]),
                   {ok, IpAddress} = ip_bitstring_to_string(hd(NameserverIpAddresses)),
                   io:format("The first element is: ~p~n", [Test]),
 
@@ -79,7 +80,7 @@ send_dns_request(Request, Ip, Port) ->
                   {ok, IpAddress} = ip_bitstring_to_string(hd(AnswerIpAddresses)),
                   io:format("IP: ~p~n", [IpAddress]),
                   io:format("~n~n"),
-                  {ok, IpAddress}
+                  {ok, AnswerIpAddresses}
               end
           after 2000 ->
       error
@@ -105,9 +106,28 @@ extract_nameserver_ip_addresses(Response, QueryCount, NameserverCount, Additiona
 
   io:fwrite("~n~n---------ADDITIONAL RECORDS---------~n"),
   {ok, AdditionalRecords, IpAddresses} = extract_additional_records(New6, [], AdditionalRecordCount),
+  io:fwrite("AdditionalRecords: ~p~n", [AdditionalRecords]),
+  io:fwrite("IpAddresses: ~p~n", [IpAddresses]),
+  {ok, do_stuff(AdditionalRecords, New6, IpAddresses)}.
+
+do_stuff(AdditionalRecords, AuthoritativeNameservers, []) ->
+    io:fwrite("AuthoritativeNameservers: ~p~n", [AuthoritativeNameservers]),
+    Ip = "199.7.83.42",
+    Port = 53,
+    io:fwrite("Recursion lets go.~n"),
+    {ok, Dns} = build_dns_request("av1.nstld.com"),
+    io:fwrite("Dns: ~p~n", [Dns]),
+    {ok, NewIp} = send_dns_request(Dns, Ip, Port),
+    NewIp2 = list_to_binary(NewIp),
+    io:fwrite("Ip to binary: ~p~n", [NewIp2]),
+    [NewIp2];
+do_stuff(AdditionalRecords, AuthoritativeNameservers, IpAddresses) ->
   io:format("Nameserver IP addresses: ~p~n", [IpAddresses]),
   io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(AdditionalRecords)]),
-  {ok, IpAddresses}.
+  io:fwrite("Recursion dont go.~n"),
+
+  IpAddresses.
+
 
 extract_query_sections(Response, 0) ->
   {ok, Response};
