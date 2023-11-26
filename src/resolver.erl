@@ -11,20 +11,15 @@
 
 %% API
 -export([run/1]).
--import(string, [tokens/2]).
+-import(string, [tokens/2, concat/2]).
+
+-record(authority_record, {name,type, class,ttl, data_length, nameserver_name}).
+
 
 run(Domain) ->
-
-  OldRequest = "\x3f\x90\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x06\x67\x6f\x6f\x67\x6c\x65\x03\x63\x6f\x6d\x00\x00\x01\x00\x01",
-  Request = [63, 144, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 6, 103, 111, 111, 103, 108, 101, 3, 99,
-    111, 109, 0, 0, 1, 0, 1],
-  %%Request = "\xbf\x75\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x04\x74\x65\x73\x74\x02\x64\x65\x00\x00\x01\x00\x01",
-  TestRequest = "63144",
-  Ip = "199.7.83.42",
-  Port = 53,
-  {ok, Dns} = build_dns_request(Domain),
-  send_dns_request(Dns, Ip, Port).
-
+  {ok, DnsRequest} = build_dns_request(Domain),
+  {ok, DnsResponse} = send_dns_request(DnsRequest, "199.7.83.42", 53),
+  parse_dns_response(DnsResponse).
 
 build_dns_request(DomainName) ->
   TransactionId = [63, 144],
@@ -60,153 +55,87 @@ send_dns_request(Request, Ip, Port) ->
   ok = gen_udp:send(Socket, Ip, Port, Request),
   Value = receive
             {udp, Socket, _, _, Bin} ->
-              {ok, {_, _, _, AA, _, _, _, _, _, QueryCount, AnswerCount, NameserverCount, AdditionalRecordCount}} = process_header(Bin),
-              case AA of
-                0 ->
-                  % Not an authority for domain. Query nameservers provided in response;
-                  {ok, NameserverIpAddresses} = extract_nameserver_ip_addresses(Bin, QueryCount, NameserverCount, AdditionalRecordCount),
-                  Test = hd(NameserverIpAddresses),
-                  io:fwrite("NameserverIpAddresses: ~p~n", [NameserverIpAddresses]),
-                  {ok, IpAddress} = ip_bitstring_to_string(hd(NameserverIpAddresses)),
-                  io:format("The first element is: ~p~n", [Test]),
-
-                  io:format("~n~n"),
-                  send_dns_request(Request, IpAddress, Port);
-                1 ->
-                  % authority for domain. Extract domain from answers and return
-                  {ok, Response} = extract_query_sections(Bin, QueryCount),
-                  io:fwrite("~n~n---------ANSWER RECORDS---------~n"),
-                  {ok, AdditionalRecords, AnswerIpAddresses} = extract_answers(Response, [], AnswerCount),
-                  {ok, IpAddress} = ip_bitstring_to_string(hd(AnswerIpAddresses)),
-                  io:format("IP: ~p~n", [IpAddress]),
-                  io:format("~n~n"),
-                  {ok, AnswerIpAddresses}
-              end
+              {ok, Bin}
           after 2000 ->
       error
           end,
   gen_udp:close(Socket),
   Value.
 
-ip_bitstring_to_string(IpBitString) ->
-  % Example list of integers
-  CharList = binary_to_list(IpBitString),
-  StringList = [integer_to_list(Int) || Int <- CharList],
-  Delimiter = ".",
-  JoinedString = string:join(StringList, Delimiter),
-  {ok, JoinedString}.
 
-extract_nameserver_ip_addresses(Response, QueryCount, NameserverCount, AdditionalRecordCount) ->
-  {ok, New5} = extract_query_sections(Response, QueryCount),
+parse_dns_response(DnsResponse) ->
+ {ok, {_, _, _, AA, _, _, _, _, _, QueryCount, AnswerCount, NameserverCount, AdditionalRecordCount}} = parse_header_section(DnsResponse),
+ {ok, RemainingDnsResponse, {QueryName, Type, Class}} = parse_query_records(DnsResponse, QueryCount),
+  io:format("~n~n---------QUERY SECTION---------~n"),
+  io:fwrite("Name:  ~p~n", [QueryName]),
+  io:fwrite("Type:  ~p~n", [Type]),
+  io:fwrite("Class: ~p~n", [Class]),
 
-  io:fwrite("~n~n---------AUTHORITATIVE NAMESERVERS---------~n"),
-  io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(New5)]),
-  {ok, New6} = extract_authoritative_nameservers(New5, NameserverCount),
-  io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(New6)]),
+  io:format("~n~n---------RECORD SECTION---------~n"),
+  {ok, Records} = parse_remaining_records(DnsResponse, RemainingDnsResponse, NameserverCount),
+  io:fwrite("Class: ~p~n", [Records]),
 
-  io:fwrite("~n~n---------ADDITIONAL RECORDS---------~n"),
-  {ok, AdditionalRecords, IpAddresses} = extract_additional_records(New6, [], AdditionalRecordCount),
-  io:fwrite("AdditionalRecords: ~p~n", [AdditionalRecords]),
-  io:fwrite("IpAddresses: ~p~n", [IpAddresses]),
-  {ok, do_stuff(AdditionalRecords, New6, IpAddresses)}.
+ {ok, "DnsRecord"}.
 
-do_stuff(AdditionalRecords, AuthoritativeNameservers, []) ->
-    io:fwrite("AuthoritativeNameservers: ~p~n", [AuthoritativeNameservers]),
-    Ip = "199.7.83.42",
-    Port = 53,
-    io:fwrite("Recursion lets go.~n"),
-    {ok, Dns} = build_dns_request("av1.nstld.com"),
-    io:fwrite("Dns: ~p~n", [Dns]),
-    {ok, NewIp} = send_dns_request(Dns, Ip, Port),
-    NewIp2 = list_to_binary(NewIp),
-    io:fwrite("Ip to binary: ~p~n", [NewIp2]),
-    [NewIp2];
-do_stuff(AdditionalRecords, AuthoritativeNameservers, IpAddresses) ->
-  io:format("Nameserver IP addresses: ~p~n", [IpAddresses]),
-  io:fwrite("Bit string as hex: ~p~n", [binary:encode_hex(AdditionalRecords)]),
-  io:fwrite("Recursion dont go.~n"),
-
-  IpAddresses.
-
-
-extract_query_sections(Response, 0) ->
-  {ok, Response};
-extract_query_sections(Response, N) ->
-  {ok, NewResponse} = extract_query_section(Response),
-  extract_query_sections(NewResponse, N - 1).
-
-extract_query_section(Response) ->
-  io:fwrite("~n~n---------QUERY SECTION---------~n"),
-  <<_:96, RemainingPacket/binary>> = Response,
-  {ok, NewResponse} = extract_query_name(RemainingPacket),
-  extract_remaining_query_section(NewResponse).
-
-extract_query_name(Response) ->
-  <<FirstNameLength:8, New/binary>> = Response,
-
-  if FirstNameLength == 0 ->
-    {ok, New};
-    true ->
-      <<FirstName:FirstNameLength/binary, NewResponse/binary>> = New,
-      io:format("Part of query name is: ~s~n", [FirstName]),
-      extract_query_name(NewResponse)
-  end.
-
-extract_remaining_query_section(Response) ->
-  {ok, NewResponse} = extract_type(Response),
-  extract_class(NewResponse).
-
-extract_type(Response) ->
-  <<Type:2/binary, New/binary>> = Response,
-  io:format("Query type: ~p~n", [Type]),
-  {ok, New}.
-
-extract_class(Response) ->
-  <<Class:2/binary, New/binary>> = Response,
-  io:format("Query class: ~p~n", [Class]),
-  {ok, New}.
-
-extract_authoritative_nameservers(AuthoritativeNameservers, 0) ->
-  {ok, AuthoritativeNameservers};
-extract_authoritative_nameservers(AuthoritativeNameservers, N) ->
-  {ok, {NameServer, NewAuthoritativeNameservers}} = extract_authoritative_nameserver(AuthoritativeNameservers),
-  io:format("~p. nameserver is: ~s~n", [N, NameServer]),
-  extract_authoritative_nameservers(NewAuthoritativeNameservers, N - 1).
-
-extract_authoritative_nameserver(AuthoritativeNameservers) ->
-  %%  Name, Type, Class, TTL, DataLength, Data
-  <<Name:16, Type:16, Class:16, TTL:32, DataLength:16, Remainder/binary>> = AuthoritativeNameservers,
-  <<NameServer:DataLength/binary, Remainder2/binary>> = Remainder,
-  {ok, {NameServer, Remainder2}}.
-
-extract_additional_records(AdditionalRecords, IpAddresses, 0) ->
-  {ok, AdditionalRecords, IpAddresses};
-extract_additional_records(AdditionalRecords, IpAddresses, N) ->
-  {ok, {IpAddress, NewAdditionalRecords}} = extract_authoritative_nameserver(AdditionalRecords),
-  NewList = append_to_list(IpAddress, IpAddresses),
-  extract_additional_records(NewAdditionalRecords, NewList, N - 1).
-
-extract_answers(AnswerRecords, IpAddresses, 0) ->
-  {ok, AnswerRecords, IpAddresses};
-extract_answers(AnswerRecords, IpAddresses, N) ->
-  {ok, {IpAddress, NewAdditionalRecords}} = extract_authoritative_nameserver(AnswerRecords),
-  NewList = append_to_list(IpAddress, IpAddresses),
-  extract_answers(NewAdditionalRecords, NewList, N - 1).
-
-append_to_list(Element, List) ->
-  Length = byte_size(Element),
-  if
-    Length == 4 ->
-      List ++ [Element];
-    true ->
-      List
-  end.
-
-process_header(Response) ->
+parse_header_section(Response) ->
   io:format("~n~n---------HEADER---------~n"),
   <<ID:16, QR:1, Opcode:4, AA:1, TC:1, RD:1, RA:1, Z:3, RCODE:4, QDCOUNT:16, ANCOUNT:16, NSCOUNT:16, ARCOUNT:16, _/binary>> = Response,
-  io:fwrite("QDCOUNT: ~p~n", [QDCOUNT]),
-  io:fwrite("ANCOUNT: ~p~n", [ANCOUNT]),
-  io:fwrite("NSCOUNT: ~p~n", [NSCOUNT]),
-  io:fwrite("ARCOUNT: ~p~n", [ARCOUNT]),
+  io:fwrite("Questions:     ~p~n", [QDCOUNT]),
+  io:fwrite("Answer RRs:    ~p~n", [ANCOUNT]),
+  io:fwrite("Authority RRs: ~p~n", [NSCOUNT]),
+  io:fwrite("Additonal RRs: ~p~n", [ARCOUNT]),
   {ok, {ID, QR, Opcode, AA, TC, RD, RA, Z, RCODE, QDCOUNT, ANCOUNT, NSCOUNT, ARCOUNT}}.
+
+parse_remaining_records(DnsResponse, RemainingDnsResponse, 0) ->
+    {ok, []};
+parse_remaining_records(DnsResponse, RemainingDnsResponse, AuthorityRecordCount) ->
+  {ok, Name, NewRemainingDnsResponse} = parse_name(DnsResponse, RemainingDnsResponse),
+  <<Type:16, Class:16, Ttl:32, DataLength:16, RemainingDnsResponse2/binary>> = NewRemainingDnsResponse,
+  DataLengthBytes = DataLength * 8,
+  <<Data:DataLengthBytes, RemainingDnsResponse3/binary>> = RemainingDnsResponse2,
+
+  {ok, NameserverName, _} = parse_name(DnsResponse, RemainingDnsResponse2),
+
+  AuthorityRecord = #authority_record{name=Name, type=Type, class=Class, ttl=Ttl, data_length=DataLength, nameserver_name=NameserverName},
+
+  {ok, NewAuthorityRecord} = parse_remaining_records(DnsResponse, RemainingDnsResponse3, AuthorityRecordCount - 1),
+
+  FullList = lists:append([AuthorityRecord], NewAuthorityRecord),
+  {ok, FullList}.
+
+parse_query_records(DnsResponse, 0) ->
+  {ok, DnsResponse};
+parse_query_records(DnsResponse, QueryCount) ->
+  io:fwrite("Resource records: ~p~n", [DnsResponse]),
+  <<_:96, ResourceRecords/binary>> = DnsResponse,
+  io:fwrite("Resource records: ~p~n", [ResourceRecords]),
+  {ok, FullName, RemainingDnsResponse} = parse_name(DnsResponse, ResourceRecords),
+  io:fwrite("Full name is: ~p~n", [FullName]),
+  io:fwrite("Remaining packet is: ~p~n", [RemainingDnsResponse]),
+
+  <<Type:16, Class:16, NewRemainingDnsResponse/binary>> = RemainingDnsResponse,
+  io:fwrite("Type is: ~p~n", [Type]),
+  io:fwrite("Class is: ~p~n", [Class]),
+  parse_query_records(DnsResponse, QueryCount - 1),
+  {ok, NewRemainingDnsResponse, {FullName, Type, Class}}.
+
+
+parse_name(DnsResponse, RemainingDnsResponse) ->
+  <<Length:8, Remainder/binary>> = RemainingDnsResponse,
+  case Length of
+    0 ->
+      <<_:8, NewRemainingDnsResponse/binary>> = RemainingDnsResponse,
+      {ok, "", NewRemainingDnsResponse};
+    192 ->
+      io:fwrite("Compression detected.~n"),
+      <<_:8, Offset:8, X/binary>> = RemainingDnsResponse,
+      <<_:Offset/binary, OffsetResponse/binary>> = DnsResponse,
+      {ok, Name, _} = parse_name(DnsResponse, OffsetResponse),
+      <<_:16, NewRemainingDnsResponse/binary>> = RemainingDnsResponse,
+      {ok, Name, NewRemainingDnsResponse};
+    Otherwise ->
+      <<NamePart:Length/binary, Remainder2/binary>> = Remainder,
+      {ok, NamePart2, NewRemainingDnsResponse} = parse_name(DnsResponse, Remainder2),
+      FullName = lists:append([binary_to_list(NamePart)], NamePart2),
+      {ok, FullName, NewRemainingDnsResponse}
+  end.
