@@ -32,7 +32,6 @@ build_dns_request(DomainName) ->
 
   QueryList = string:tokens(DomainName, "."),
 
-
   QueryListTransformed = lists:map(fun(X) -> [length(X), lists:map(fun(Y) -> [Y] end, X)] end, QueryList),
   QueryListFlattened = lists:flatten(QueryListTransformed),
 
@@ -44,7 +43,6 @@ build_dns_request(DomainName) ->
     AnswerResourceRecords, AuthorityResourceRecords, AdditionalResourceRecords,
     QueryListFlattened, QueryEnd, RecordType, Class]),
 
-  io:format("Request packet: ~p~n", [InitialRequestPacket]),
   {ok, InitialRequestPacket}.
 
 
@@ -65,7 +63,7 @@ send_dns_request(Request, Ip, Port) ->
 
 
 parse_dns_response(DnsResponse) ->
- {ok, {_, _, _, AA, _, _, _, _, _, QueryCount, AnswerCount, NameserverCount, AdditionalRecordCount}} = parse_header_section(DnsResponse),
+ {ok, {_, _, _, AA, _, _, _, _, _, QueryCount, AnswerRecordCount, NameserverCount, AdditionalRecordCount}} = parse_header_section(DnsResponse),
  {ok, RemainingDnsResponse, {QueryName, Type, Class}} = parse_query_records(DnsResponse, QueryCount),
   io:format("~n~n---------QUERY SECTION---------~n"),
   io:fwrite("Name:  ~p~n", [QueryName]),
@@ -75,15 +73,16 @@ parse_dns_response(DnsResponse) ->
   io:format("~n~n---------AUTHORITY RECORD SECTION---------~n"),
   {ok, RemainingDnsResponse2, AuthorityRecords} = parse_authority_records(DnsResponse, RemainingDnsResponse, NameserverCount),
   io:fwrite("~p~n", [AuthorityRecords]),
-  io:fwrite("Remaining DNS packet: ~p~n", [RemainingDnsResponse2]),
-
 
   io:format("~n~n---------ADDITIONAL RECORD SECTION---------~n"),
-  {ok, TheEnd, AdditionalRecords} = parse_additional_records(DnsResponse, RemainingDnsResponse2, AdditionalRecordCount),
+  {ok, RemainingDnsResponse3, AdditionalRecords} = parse_additional_records(DnsResponse, RemainingDnsResponse2, AdditionalRecordCount),
   io:fwrite("~p~n", [AdditionalRecords]),
-  io:fwrite("Remaining DNS packet: ~p~n", [TheEnd]),
 
- {ok, "DnsRecord"}.
+  io:format("~n~n---------ANSWER RECORD SECTION---------~n"),
+  {ok, _, AnswerRecords} = parse_additional_records(DnsResponse, RemainingDnsResponse3, AnswerRecordCount),
+  io:fwrite("~p~n", [AnswerRecords]),
+
+  {ok, "DnsRecord"}.
 
 parse_header_section(Response) ->
   io:format("~n~n---------HEADER---------~n"),
@@ -94,7 +93,7 @@ parse_header_section(Response) ->
   io:fwrite("Additonal RRs: ~p~n", [ARCOUNT]),
   {ok, {ID, QR, Opcode, AA, TC, RD, RA, Z, RCODE, QDCOUNT, ANCOUNT, NSCOUNT, ARCOUNT}}.
 
-parse_additional_records(DnsResponse, RemainingDnsResponse, 0) ->
+parse_additional_records(_, RemainingDnsResponse, 0) ->
     {ok, RemainingDnsResponse, []};
 parse_additional_records(DnsResponse, RemainingDnsResponse, AdditionalRecordCount) ->
   {ok, Name, NewRemainingDnsResponse} = parse_name(DnsResponse, RemainingDnsResponse),
@@ -102,25 +101,24 @@ parse_additional_records(DnsResponse, RemainingDnsResponse, AdditionalRecordCoun
   DataLengthBytes = DataLength,
   <<Data:DataLengthBytes/binary, RemainingDnsResponse3/binary>> = RemainingDnsResponse2,
   Ip = inet:ntoa(list_to_tuple(binary_to_list(Data))),
-  io:fwrite("IP: ~p~n", [Ip]),
 
   case Ip of
     {error, einval} -> AdditionalRecord = #additional_record{name=Name, type=Type, class=Class, ttl=Ttl, data_length=DataLength, ip="IPv6"};
-    Otherwise -> AdditionalRecord = #additional_record{name=Name, type=Type, class=Class, ttl=Ttl, data_length=DataLength, ip=Ip}
+    _ -> AdditionalRecord = #additional_record{name=Name, type=Type, class=Class, ttl=Ttl, data_length=DataLength, ip=Ip}
   end,
 
-  {ok, _, NewAdditionalRecord} = parse_additional_records(DnsResponse, RemainingDnsResponse3, AdditionalRecordCount - 1),
+  {ok, RemainingDnsResponse4, NewAdditionalRecord} = parse_additional_records(DnsResponse, RemainingDnsResponse3, AdditionalRecordCount - 1),
 
   FullList = lists:append([AdditionalRecord], NewAdditionalRecord),
-  {ok, RemainingDnsResponse3, FullList}.
+  {ok, RemainingDnsResponse4, FullList}.
 
-parse_authority_records(DnsResponse, RemainingDnsResponse, 0) ->
+parse_authority_records(_, RemainingDnsResponse, 0) ->
     {ok, RemainingDnsResponse, []};
 parse_authority_records(DnsResponse, RemainingDnsResponse, AuthorityRecordCount) ->
   {ok, Name, NewRemainingDnsResponse} = parse_name(DnsResponse, RemainingDnsResponse),
   <<Type:16, Class:16, Ttl:32, DataLength:16, RemainingDnsResponse2/binary>> = NewRemainingDnsResponse,
   DataLengthBytes = DataLength * 8,
-  <<Data:DataLengthBytes, RemainingDnsResponse3/binary>> = RemainingDnsResponse2,
+  <<_:DataLengthBytes, RemainingDnsResponse3/binary>> = RemainingDnsResponse2,
 
   {ok, NameserverName, _} = parse_name(DnsResponse, RemainingDnsResponse2),
 
@@ -134,12 +132,9 @@ parse_authority_records(DnsResponse, RemainingDnsResponse, AuthorityRecordCount)
 parse_query_records(DnsResponse, 0) ->
   {ok, DnsResponse};
 parse_query_records(DnsResponse, QueryCount) ->
-  io:fwrite("Resource records: ~p~n", [DnsResponse]),
   <<_:96, ResourceRecords/binary>> = DnsResponse,
-  io:fwrite("Resource records: ~p~n", [ResourceRecords]),
   {ok, FullName, RemainingDnsResponse} = parse_name(DnsResponse, ResourceRecords),
   io:fwrite("Full name is: ~p~n", [FullName]),
-  io:fwrite("Remaining packet is: ~p~n", [RemainingDnsResponse]),
 
   <<Type:16, Class:16, NewRemainingDnsResponse/binary>> = RemainingDnsResponse,
   io:fwrite("Type is: ~p~n", [Type]),
@@ -155,12 +150,12 @@ parse_name(DnsResponse, RemainingDnsResponse) ->
       <<_:8, NewRemainingDnsResponse/binary>> = RemainingDnsResponse,
       {ok, "", NewRemainingDnsResponse};
     192 ->
-      <<_:8, Offset:8, X/binary>> = RemainingDnsResponse,
+      <<_:8, Offset:8, _/binary>> = RemainingDnsResponse,
       <<_:Offset/binary, OffsetResponse/binary>> = DnsResponse,
       {ok, Name, _} = parse_name(DnsResponse, OffsetResponse),
       <<_:16, NewRemainingDnsResponse/binary>> = RemainingDnsResponse,
       {ok, Name, NewRemainingDnsResponse};
-    Otherwise ->
+    _ ->
       <<NamePart:Length/binary, Remainder2/binary>> = Remainder,
       {ok, NamePart2, NewRemainingDnsResponse} = parse_name(DnsResponse, Remainder2),
       FullName = lists:append([binary_to_list(NamePart)], NamePart2),
