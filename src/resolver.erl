@@ -14,6 +14,7 @@
 -import(string, [tokens/2, concat/2]).
 
 -record(authority_record, {name,type, class,ttl, data_length, nameserver_name}).
+-record(additional_record, {name,type, class,ttl, data_length, ip}).
 
 
 run(Domain) ->
@@ -71,9 +72,16 @@ parse_dns_response(DnsResponse) ->
   io:fwrite("Type:  ~p~n", [Type]),
   io:fwrite("Class: ~p~n", [Class]),
 
-  io:format("~n~n---------RECORD SECTION---------~n"),
-  {ok, Records} = parse_remaining_records(DnsResponse, RemainingDnsResponse, NameserverCount),
-  io:fwrite("Class: ~p~n", [Records]),
+  io:format("~n~n---------AUTHORITY RECORD SECTION---------~n"),
+  {ok, RemainingDnsResponse2, AuthorityRecords} = parse_authority_records(DnsResponse, RemainingDnsResponse, NameserverCount),
+  io:fwrite("~p~n", [AuthorityRecords]),
+  io:fwrite("Remaining DNS packet: ~p~n", [RemainingDnsResponse2]),
+
+
+  io:format("~n~n---------ADDITIONAL RECORD SECTION---------~n"),
+  {ok, TheEnd, AdditionalRecords} = parse_additional_records(DnsResponse, RemainingDnsResponse2, AdditionalRecordCount),
+  io:fwrite("~p~n", [AdditionalRecords]),
+  io:fwrite("Remaining DNS packet: ~p~n", [TheEnd]),
 
  {ok, "DnsRecord"}.
 
@@ -86,9 +94,29 @@ parse_header_section(Response) ->
   io:fwrite("Additonal RRs: ~p~n", [ARCOUNT]),
   {ok, {ID, QR, Opcode, AA, TC, RD, RA, Z, RCODE, QDCOUNT, ANCOUNT, NSCOUNT, ARCOUNT}}.
 
-parse_remaining_records(DnsResponse, RemainingDnsResponse, 0) ->
-    {ok, []};
-parse_remaining_records(DnsResponse, RemainingDnsResponse, AuthorityRecordCount) ->
+parse_additional_records(DnsResponse, RemainingDnsResponse, 0) ->
+    {ok, RemainingDnsResponse, []};
+parse_additional_records(DnsResponse, RemainingDnsResponse, AdditionalRecordCount) ->
+  {ok, Name, NewRemainingDnsResponse} = parse_name(DnsResponse, RemainingDnsResponse),
+  <<Type:16, Class:16, Ttl:32, DataLength:16, RemainingDnsResponse2/binary>> = NewRemainingDnsResponse,
+  DataLengthBytes = DataLength,
+  <<Data:DataLengthBytes/binary, RemainingDnsResponse3/binary>> = RemainingDnsResponse2,
+  Ip = inet:ntoa(list_to_tuple(binary_to_list(Data))),
+  io:fwrite("IP: ~p~n", [Ip]),
+
+  case Ip of
+    {error, einval} -> AdditionalRecord = #additional_record{name=Name, type=Type, class=Class, ttl=Ttl, data_length=DataLength, ip="IPv6"};
+    Otherwise -> AdditionalRecord = #additional_record{name=Name, type=Type, class=Class, ttl=Ttl, data_length=DataLength, ip=Ip}
+  end,
+
+  {ok, _, NewAdditionalRecord} = parse_additional_records(DnsResponse, RemainingDnsResponse3, AdditionalRecordCount - 1),
+
+  FullList = lists:append([AdditionalRecord], NewAdditionalRecord),
+  {ok, RemainingDnsResponse3, FullList}.
+
+parse_authority_records(DnsResponse, RemainingDnsResponse, 0) ->
+    {ok, RemainingDnsResponse, []};
+parse_authority_records(DnsResponse, RemainingDnsResponse, AuthorityRecordCount) ->
   {ok, Name, NewRemainingDnsResponse} = parse_name(DnsResponse, RemainingDnsResponse),
   <<Type:16, Class:16, Ttl:32, DataLength:16, RemainingDnsResponse2/binary>> = NewRemainingDnsResponse,
   DataLengthBytes = DataLength * 8,
@@ -98,10 +126,10 @@ parse_remaining_records(DnsResponse, RemainingDnsResponse, AuthorityRecordCount)
 
   AuthorityRecord = #authority_record{name=Name, type=Type, class=Class, ttl=Ttl, data_length=DataLength, nameserver_name=NameserverName},
 
-  {ok, NewAuthorityRecord} = parse_remaining_records(DnsResponse, RemainingDnsResponse3, AuthorityRecordCount - 1),
+  {ok, RemainingDnsResponse4, NewAuthorityRecord} = parse_authority_records(DnsResponse, RemainingDnsResponse3, AuthorityRecordCount - 1),
 
   FullList = lists:append([AuthorityRecord], NewAuthorityRecord),
-  {ok, FullList}.
+  {ok, RemainingDnsResponse4, FullList}.
 
 parse_query_records(DnsResponse, 0) ->
   {ok, DnsResponse};
@@ -127,7 +155,6 @@ parse_name(DnsResponse, RemainingDnsResponse) ->
       <<_:8, NewRemainingDnsResponse/binary>> = RemainingDnsResponse,
       {ok, "", NewRemainingDnsResponse};
     192 ->
-      io:fwrite("Compression detected.~n"),
       <<_:8, Offset:8, X/binary>> = RemainingDnsResponse,
       <<_:Offset/binary, OffsetResponse/binary>> = DnsResponse,
       {ok, Name, _} = parse_name(DnsResponse, OffsetResponse),
