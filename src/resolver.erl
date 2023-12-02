@@ -21,7 +21,13 @@
 run(Domain) ->
 
 
-  resolve(Domain, "199.7.83.42").
+  {ok, AnswerRecords} = resolve(Domain, "199.7.83.42"),
+  io:format("~n~n---------ANSWER---------~n"),
+  lists:foreach(fun(AnswerRecord) ->
+                        io:format("Domain: ~p IPv4: ~p~n",[string:join(AnswerRecord#additional_record.name, "."), AnswerRecord#additional_record.ip])
+                end, AnswerRecords),
+  {ok}.
+
 
 
 
@@ -30,14 +36,9 @@ resolve(Domain, DnsServer) ->
   {ok, DnsResponseUnparsed} = send_dns_request(DnsRequest, DnsServer, 53),
   {ok, DnsResponse} = parse_dns_response(DnsResponseUnparsed),
 
-  io:fwrite("DnsResponse: ~p~n", [DnsResponse]),
-  io:fwrite("DnsResponse additional records: ~p~n", [length(DnsResponse#dns_response.additional_records)]),
-  io:fwrite("DnsResponse additional records boolean: ~p~n", [length(DnsResponse#dns_response.additional_records) == 0]),
-
-
   if
     DnsResponse#dns_response.answer_type == 1 ->
-        io:fwrite("Answer found: ~p~n", [DnsResponse#dns_response.answer_records]),
+        io:fwrite("~nAnswer found: ~p~n", [DnsResponse#dns_response.answer_records]),
         {ok, DnsResponse#dns_response.answer_records};
     length(DnsResponse#dns_response.additional_records) == 0 ->
       io:fwrite("AdditionalRecords empty.~n"),
@@ -89,7 +90,7 @@ build_dns_request(DomainName) ->
 
 
 send_dns_request(Request, Ip, Port) ->
-  io:format("---------DNS REQUEST---------~n"),
+  io:format("~n~n---------DNS REQUEST---------~n"),
   io:format("IP: ~s~n", [Ip]),
   io:format("Port: ~p~n", [Port]),
   {ok, Socket} = gen_udp:open(0, [binary]),
