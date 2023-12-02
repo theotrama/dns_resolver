@@ -13,14 +13,61 @@
 -export([run/1]).
 -import(string, [tokens/2, concat/2]).
 
--record(authority_record, {name,type, class,ttl, data_length, nameserver_name}).
--record(additional_record, {name,type, class,ttl, data_length, ip}).
+-record(authority_record, {name, type, class, ttl, data_length, nameserver_name}).
+-record(additional_record, {name, type, class, ttl, data_length, ip}).
+-record(dns_response, {answer_type, authority_records, additional_records, answer_records}).
 
 
 run(Domain) ->
+
+
+  resolve(Domain, "199.7.83.42"),
   {ok, DnsRequest} = build_dns_request(Domain),
   {ok, DnsResponse} = send_dns_request(DnsRequest, "199.7.83.42", 53),
   parse_dns_response(DnsResponse).
+
+
+
+resolve(Domain, DnsServer) ->
+  {ok, DnsRequest} = build_dns_request(Domain),
+  {ok, DnsResponseUnparsed} = send_dns_request(DnsRequest, DnsServer, 53),
+  {ok, DnsResponse} = parse_dns_response(DnsResponseUnparsed),
+
+  case DnsResponse of ->
+    DnsResponse#dns_response.answer_type == 1 -> io:fwrite("Found the end.");
+    Otherwise -> io:fwrite("not the end")
+  end.
+
+
+  if
+    DnsResponse#dns_response.answer_type == 1 ->
+      io:fwrite("Answer found...~n"),
+      {ok, DnsResponse#dns_response.answer_records};
+    true ->
+      io:fwrite("Not an answer yet. Continue...~n")
+  end,
+
+  if
+    DnsResponse#dns_response.additional_records == [] ->
+
+      AuthorityRecords = DnsResponse#dns_response.authority_records,
+      FirstAuthorityRecord = hd(AuthorityRecords),
+      Nameserver = FirstAuthorityRecord#authority_record.nameserver_name,
+      ParsedNameserver = string:join(Nameserver, "."),
+      {ok, AnswerRecords} = resolve(ParsedNameserver, "199.7.83.42"),
+
+      FirstAnswer = hd(lists:filter(fun(AnswerRecord) -> AnswerRecord /= "IPv6" end, AnswerRecords)),
+      NewDnsServerIp = FirstAnswer#additional_record.ip,
+
+      resolve(Domain, NewDnsServerIp);
+    true ->
+      io:fwrite("Empty additional record. Recursively resolving authority name server...~n")
+  end,
+
+  AdditionalRecords = DnsResponse#dns_response.additional_records,
+  FirstAdditionalRecord = hd(AdditionalRecords),
+  OtherDnsServerIp = FirstAdditionalRecord#additional_record.ip,
+  resolve(Domain, OtherDnsServerIp).
 
 build_dns_request(DomainName) ->
   TransactionId = [63, 144],
@@ -82,7 +129,8 @@ parse_dns_response(DnsResponse) ->
   {ok, _, AnswerRecords} = parse_additional_records(DnsResponse, RemainingDnsResponse3, AnswerRecordCount),
   io:fwrite("~p~n", [AnswerRecords]),
 
-  {ok, "DnsRecord"}.
+  ParsedDnsResponse = #dns_response{answer_type=AA, authority_records=AuthorityRecords, additional_records=AdditionalRecords, answer_records=AnswerRecords},
+  {ok, ParsedDnsResponse}.
 
 parse_header_section(Response) ->
   io:format("~n~n---------HEADER---------~n"),
