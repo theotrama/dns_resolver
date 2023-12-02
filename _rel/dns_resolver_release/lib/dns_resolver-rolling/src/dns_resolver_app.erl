@@ -7,7 +7,10 @@
 start(_Type, _Args) ->
 
   Dispatch = cowboy_router:compile([
-    {'_', [{"/", dns_request_handler, []}]}
+    {'_', [
+      {"/dns", dns_request_handler, [create]},
+      {"/static", cowboy_static, {priv_file, dns_resolver, "static/index.html"}}
+    ]}
   ]),
   {ok, _} = cowboy:start_clear(my_http_listener,
     [{port, 8080}],

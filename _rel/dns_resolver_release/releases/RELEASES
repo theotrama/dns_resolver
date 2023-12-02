@@ -9,6 +9,7 @@
            {ssl,"10.9","./lib/ssl-10.9"},
            {ranch,"1.8.0","./lib/ranch-1.8.0"},
            {cowboy,"2.10.0","./lib/cowboy-2.10.0"},
+           {jsx,"3.1.0","./lib/jsx-3.1.0"},
            {dns_resolver,"rolling","./lib/dns_resolver-rolling"},
            {sasl,"4.2","./lib/sasl-4.2"},
            {runtime_tools,"1.19","./lib/runtime_tools-1.19"}],

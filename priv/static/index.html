@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <script>
+      $(document).ready(function () {
+          $("button").click(function () {
+              var query = $('#QueryForm').find('input[name="hostname"]').val()
+
+              data = JSON.stringify({
+                  "query": query
+              })
+              console.log(data)
+              $.ajax({
+                  url: "http://localhost:8080/dns",
+                  headers: {
+                      'Accept': "application/json",
+                      'Content-Type': "application/json"
+                  },
+                  type: "POST",
+                  data: data,
+                  contentType: "application/json; charset=utf-8",
+                  dataType: "json",
+                  success: function () {
+                      console.log("success")
+                  }
+              })
+          });
+      });
+  </script>
+</head>
+<body>
+
+<div id="QueryForm">
+  <form>
+    <input type="text" id="hostname" name="hostname" value="google.com"><br>
+  </form>
+
+  <button>Query</button>
+</div>
+
+
+</body>
+</html>
