@@ -21,8 +21,18 @@
                   data: data,
                   contentType: "application/json; charset=utf-8",
                   dataType: "json",
-                  success: function () {
+                  success: function (data) {
                       console.log("success")
+                      console.log(data)
+
+                      let ulElement = $("#myList");
+                      ulElement.empty();
+                      // Iterate over the array and append list items to the <ul>
+                      $.each(data.answers, function (index, value) {
+                          console.log(value)
+                          // Append each item as a <li> element
+                          ulElement.append("<li>" + value + "</li>");
+                      });
                   }
               })
           });
@@ -37,6 +47,11 @@
   </form>
 
   <button>Query</button>
+</div>
+<div id="Result">
+  Results
+  <ul id="myList"></ul>
+
 </div>
 
 
