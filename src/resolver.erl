@@ -125,7 +125,7 @@ parse_dns_response(DnsResponse) ->
 
 
   io:format("~n~n---------ADDITIONAL RECORD SECTION---------~n"),
-  {ok, RemainingDnsResponse4, AdditionalRecords} = parse_additional_records(DnsResponse, RemainingDnsResponse3, AdditionalRecordCount),
+  {ok, _, AdditionalRecords} = parse_additional_records(DnsResponse, RemainingDnsResponse3, AdditionalRecordCount),
   io:fwrite("~p~n", [AdditionalRecords]),
 
 
