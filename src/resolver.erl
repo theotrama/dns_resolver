@@ -197,20 +197,13 @@ parse_name(DnsResponse, RemainingDnsResponse) ->
     0 ->
       <<_:8, NewRemainingDnsResponse/binary>> = RemainingDnsResponse,
       {ok, "", NewRemainingDnsResponse};
-    192 ->
-      <<_:8, Offset:8, _/binary>> = RemainingDnsResponse,
-      <<_:Offset/binary, OffsetResponse/binary>> = DnsResponse,
-      {ok, Name, _} = parse_name(DnsResponse, OffsetResponse),
-      <<_:16, NewRemainingDnsResponse/binary>> = RemainingDnsResponse,
-      {ok, Name, NewRemainingDnsResponse};
-    193 ->
+    Length when Length == 192; Length == 193 ->
       <<_:8, Offset:8, _/binary>> = RemainingDnsResponse,
       <<_:Offset/binary, OffsetResponse/binary>> = DnsResponse,
       {ok, Name, _} = parse_name(DnsResponse, OffsetResponse),
       <<_:16, NewRemainingDnsResponse/binary>> = RemainingDnsResponse,
       {ok, Name, NewRemainingDnsResponse};
     _ ->
-      io:fwrite("Remainder: ~p~n", [Remainder]),
       <<NamePart:Length/binary, Remainder2/binary>> = Remainder,
       {ok, NamePart2, NewRemainingDnsResponse} = parse_name(DnsResponse, Remainder2),
       FullName = lists:append([binary_to_list(NamePart)], NamePart2),
