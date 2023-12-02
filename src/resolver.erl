@@ -113,17 +113,21 @@ parse_dns_response(DnsResponse) ->
   io:fwrite("Type:  ~p~n", [Type]),
   io:fwrite("Class: ~p~n", [Class]),
 
-  io:format("~n~n---------AUTHORITY RECORD SECTION---------~n"),
-  {ok, RemainingDnsResponse2, AuthorityRecords} = parse_authority_records(DnsResponse, RemainingDnsResponse, NameserverCount),
-  io:fwrite("~p~n", [AuthorityRecords]),
-
-  io:format("~n~n---------ADDITIONAL RECORD SECTION---------~n"),
-  {ok, RemainingDnsResponse3, AdditionalRecords} = parse_additional_records(DnsResponse, RemainingDnsResponse2, AdditionalRecordCount),
-  io:fwrite("~p~n", [AdditionalRecords]),
 
   io:format("~n~n---------ANSWER RECORD SECTION---------~n"),
-  {ok, _, AnswerRecords} = parse_additional_records(DnsResponse, RemainingDnsResponse3, AnswerRecordCount),
+  {ok, RemainingDnsResponse2, AnswerRecords} = parse_additional_records(DnsResponse, RemainingDnsResponse, AnswerRecordCount),
   io:fwrite("~p~n~n", [AnswerRecords]),
+
+
+  io:format("~n~n---------AUTHORITY RECORD SECTION---------~n"),
+  {ok, RemainingDnsResponse3, AuthorityRecords} = parse_authority_records(DnsResponse, RemainingDnsResponse2, NameserverCount),
+  io:fwrite("~p~n", [AuthorityRecords]),
+
+
+  io:format("~n~n---------ADDITIONAL RECORD SECTION---------~n"),
+  {ok, RemainingDnsResponse4, AdditionalRecords} = parse_additional_records(DnsResponse, RemainingDnsResponse3, AdditionalRecordCount),
+  io:fwrite("~p~n", [AdditionalRecords]),
+
 
   ParsedDnsResponse = #dns_response{answer_type=AA, authority_records=AuthorityRecords, additional_records=AdditionalRecords, answer_records=AnswerRecords},
   {ok, ParsedDnsResponse}.
