@@ -21,10 +21,7 @@
 run(Domain) ->
 
 
-  resolve(Domain, "199.7.83.42"),
-  {ok, DnsRequest} = build_dns_request(Domain),
-  {ok, DnsResponse} = send_dns_request(DnsRequest, "199.7.83.42", 53),
-  parse_dns_response(DnsResponse).
+  resolve(Domain, "199.7.83.42").
 
 
 
@@ -33,41 +30,39 @@ resolve(Domain, DnsServer) ->
   {ok, DnsResponseUnparsed} = send_dns_request(DnsRequest, DnsServer, 53),
   {ok, DnsResponse} = parse_dns_response(DnsResponseUnparsed),
 
-  case DnsResponse of ->
-    DnsResponse#dns_response.answer_type == 1 -> io:fwrite("Found the end.");
-    Otherwise -> io:fwrite("not the end")
-  end.
+  io:fwrite("DnsResponse: ~p~n", [DnsResponse]),
+  io:fwrite("DnsResponse additional records: ~p~n", [length(DnsResponse#dns_response.additional_records)]),
+  io:fwrite("DnsResponse additional records boolean: ~p~n", [length(DnsResponse#dns_response.additional_records) == 0]),
 
 
   if
     DnsResponse#dns_response.answer_type == 1 ->
-      io:fwrite("Answer found...~n"),
-      {ok, DnsResponse#dns_response.answer_records};
-    true ->
-      io:fwrite("Not an answer yet. Continue...~n")
-  end,
-
-  if
-    DnsResponse#dns_response.additional_records == [] ->
-
+        io:fwrite("Answer found: ~p~n", [DnsResponse#dns_response.answer_records]),
+        {ok, DnsResponse#dns_response.answer_records};
+    length(DnsResponse#dns_response.additional_records) == 0 ->
+      io:fwrite("AdditionalRecords empty.~n"),
       AuthorityRecords = DnsResponse#dns_response.authority_records,
       FirstAuthorityRecord = hd(AuthorityRecords),
       Nameserver = FirstAuthorityRecord#authority_record.nameserver_name,
       ParsedNameserver = string:join(Nameserver, "."),
       {ok, AnswerRecords} = resolve(ParsedNameserver, "199.7.83.42"),
 
-      FirstAnswer = hd(lists:filter(fun(AnswerRecord) -> AnswerRecord /= "IPv6" end, AnswerRecords)),
+      FirstAnswer = hd(lists:filter(fun(AnswerRecord) -> AnswerRecord#additional_record.ip /= "IPv6" end, AnswerRecords)),
       NewDnsServerIp = FirstAnswer#additional_record.ip,
 
       resolve(Domain, NewDnsServerIp);
     true ->
-      io:fwrite("Empty additional record. Recursively resolving authority name server...~n")
-  end,
+      io:fwrite("AdditionalRecords available.~n"),
+      AdditionalRecords = DnsResponse#dns_response.additional_records,
+      io:fwrite("AdditionalRecords: ~p~n", [AdditionalRecords]),
+      FilteredRecords = lists:filter(fun(AdditionalRecord) -> AdditionalRecord#additional_record.ip /= "IPv6" end, AdditionalRecords),
+      io:fwrite("FilteredRecords: ~p~n", [FilteredRecords]),
+      FirstAdditionalRecord = hd(lists:filter(fun(AdditionalRecord) -> AdditionalRecord#additional_record.ip /= "IPv6" end, AdditionalRecords)),
+      OtherDnsServerIp = FirstAdditionalRecord#additional_record.ip,
+      io:fwrite("Making new call to: ~p~n", [OtherDnsServerIp]),
+      resolve(Domain, OtherDnsServerIp)
+  end.
 
-  AdditionalRecords = DnsResponse#dns_response.additional_records,
-  FirstAdditionalRecord = hd(AdditionalRecords),
-  OtherDnsServerIp = FirstAdditionalRecord#additional_record.ip,
-  resolve(Domain, OtherDnsServerIp).
 
 build_dns_request(DomainName) ->
   TransactionId = [63, 144],
