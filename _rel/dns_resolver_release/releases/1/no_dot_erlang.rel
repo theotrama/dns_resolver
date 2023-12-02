@@ -1,3 +1,0 @@
-{release,{"no_dot_erlang","1.0"},
-         {erts,"13.2"},
-         [{kernel,"8.5.4"},{stdlib,"4.3"}]}. 

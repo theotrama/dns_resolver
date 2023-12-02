@@ -44,7 +44,7 @@ resolve(Domain, DnsServer) ->
       {ok, AnswerRecords} = resolve(ParsedNameserver, "199.7.83.42"),
 
       FirstAnswer = hd(lists:filter(fun(AnswerRecord) ->
-        AnswerRecord#additional_record.ip /= "IPv6" end, AnswerRecords)),
+        AnswerRecord#additional_record.type == 1 end, AnswerRecords)),
       NewDnsServerIp = FirstAnswer#additional_record.ip,
 
       resolve(Domain, NewDnsServerIp);
@@ -53,10 +53,10 @@ resolve(Domain, DnsServer) ->
       AdditionalRecords = DnsResponse#dns_response.additional_records,
       io:fwrite("AdditionalRecords: ~p~n", [AdditionalRecords]),
       FilteredRecords = lists:filter(fun(AdditionalRecord) ->
-        AdditionalRecord#additional_record.ip /= "IPv6" end, AdditionalRecords),
+        AdditionalRecord#additional_record.type == 1 end, AdditionalRecords),
       io:fwrite("FilteredRecords: ~p~n", [FilteredRecords]),
       FirstAdditionalRecord = hd(lists:filter(fun(AdditionalRecord) ->
-        AdditionalRecord#additional_record.ip /= "IPv6" end, AdditionalRecords)),
+        AdditionalRecord#additional_record.type == 1 end, AdditionalRecords)),
       OtherDnsServerIp = FirstAdditionalRecord#additional_record.ip,
       io:fwrite("Making new call to: ~p~n", [OtherDnsServerIp]),
       resolve(Domain, OtherDnsServerIp)

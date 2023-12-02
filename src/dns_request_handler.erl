@@ -5,6 +5,8 @@
 
 -import(resolver, [run/1]).
 
+-record(additional_record, {name, type, class, ttl, data_length, ip}).
+
 
 init(Req, State) ->
   {cowboy_rest, Req, State}.
@@ -12,16 +14,15 @@ init(Req, State) ->
 allowed_methods(Req, State) ->
   {[<<"POST">>], Req, State}.
 
-content_types_accepted(Req, State) ->
-  {[
-    {<<"application/json">>, resolve_dns_query}
-  ], Req, State}.
-
 content_types_provided(Req, State) ->
   {[
     {<<"application/json">>, resolve_dns_query}
   ], Req, State}.
 
+content_types_accepted(Req, State) ->
+  {[
+    {<<"application/json">>, resolve_dns_query}
+  ], Req, State}.
 
 resolve_dns_query(Req, State) ->
   io:fwrite("~nTest~n"),
@@ -29,18 +30,35 @@ resolve_dns_query(Req, State) ->
   io:fwrite("Request: ~p~n", [Req]),
   io:fwrite("Has body? ~p~n", [cowboy_req:has_body(Req)]),
 
-
   {ok, ReqBody, _} = cowboy_req:read_body(Req),
   io:fwrite("RequestBody: ~p~n", [ReqBody]),
   RequestBodyDecoded = jsx:decode(ReqBody),
   io:fwrite("RequestBody: ~p~n", [RequestBodyDecoded]),
   Query = maps:get(<<"query">>, RequestBodyDecoded),
-  {ok, _} = resolve_domain(Query),
-  {true, Req, State}.
+  {ok, Ips} = resolve_domain(Query),
+  io:fwrite("Ips: ~p~n", [Ips]),
+  ResponseBody = jsx:encode(Ips),
+  io:fwrite("ResponseBody: ~p~n", [ResponseBody]),
+
+  NewIps = lists:map(fun(Ip) -> iolist_to_binary(Ip) end, Ips),
+  io:fwrite("ResponseBody: ~p~n", [NewIps]),
+
+  Response = #{<<"answers">> => NewIps},
+
+
+  %% Set response headers
+  Headers = #{<<"content-type">> => <<"application/json">>},
+
+  %% Send the response
+  {ok, Reply} = cowboy_req:reply(200, Headers, jsx:encode(Response), Req),
+  {true, Reply, State}.
 
 
 resolve_domain(Query) ->
   io:fwrite("Query: ~p~n", [Query]),
-  {ok, Response} = run("google.com"),
-  io:fwrite("Response: ~p~n", [Response]),
-  {ok, "_"}.
+  {ok, AnswerRecords} = run(binary:bin_to_list(Query)),
+  io:fwrite("Response: ~p~n", [AnswerRecords]),
+
+
+  Ips = lists:map(fun(AnswerRecord) -> AnswerRecord#additional_record.ip end, AnswerRecords),
+  {ok, Ips}.
