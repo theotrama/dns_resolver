@@ -16,5 +16,9 @@ deps
 _build/
 _checkouts/
 
+.erlang.mk/
+_rel/
+_deps/
+
 .idea/
 out/
