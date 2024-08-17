@@ -11,3 +11,9 @@ erl
 c(resolver).
 resolver:run("google.com").
 ```
+
+## Website
+To run the browser resolver tool. Afterward, go to http://localhost:8080/static.
+```bash
+make run # from root directory
+```
